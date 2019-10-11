@@ -189,7 +189,7 @@ do
         --output-json-fname ${output_json_dir}/stochastic-avg-${seed}.json
 done
 
-# calculatw PAC-bayes bounds inngredients
+# calculate PAC-bayes bounds ingredients
 for seed in "${seeds[@]}"
 do
     # deterministic
