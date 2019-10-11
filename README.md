@@ -9,7 +9,7 @@
 
 
 ```bash
-git clone git@github.com:pb-contrastive.git
+git clone git@github.com:nzw0301/pb-contrastive.git
 cd pb-contrastive
 ```
 
