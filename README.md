@@ -42,3 +42,17 @@ python setup.py install
 
 Run codes on `README.md` and `MLP-README.md` under `code` dir.
 Then run `create-tables.ipynb` to create tables in the manuscript.
+
+---
+
+## BibTeX
+
+```
+@inproceedings{KGG2019,
+    title = {PAC-Bayesian Contrastive Unsupervised Representation Learning},
+    author = {Kento Nozawa, Pascal Germain, Benjamin Guedj},
+    year = {2019},
+    archivePrefix = {arXiv},
+    eprint = {1910.04464},
+}
+```
