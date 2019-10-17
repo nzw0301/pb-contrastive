@@ -135,7 +135,7 @@ optimizers=(
 
 for seed in "${seeds[@]}"
 do
-    for lr in "${lrs[@]}"
+    for lr in "${lr_list[@]}"
     do
         for optimizer in "${optimizers[@]}"
         do            
@@ -228,7 +228,7 @@ optimizers=(
 
 for seed in "${seeds[@]}"
 do
-    for lr in "${lrs[@]}"
+    for lr in "${lr_list[@]}"
     do
         for optimizer in "${optimizers[@]}"
         do
