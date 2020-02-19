@@ -19,8 +19,10 @@ class EarlyStopping(object):
         :param patience: How many times patience from the best value.
         """
         if mode not in self._valid_modes:
-            raise ValueError('mode {} is not supported. You must pass one of [{}] to `mode`.'.format(
-                mode, ', '.join(self._valid_modes)))
+            valid_modes = ', '.join(self._valid_modes)
+            raise ValueError(
+                'mode {} is not supported. You must pass one of [{}] to `mode`.'.format(mode, valid_modes)
+            )
         if patience <= 0:
             raise ValueError('`patient` must be positive.')
 
@@ -39,14 +41,14 @@ class EarlyStopping(object):
     def is_stopped_and_save(self, metric, model, save_name):
         """
         If the new metric becomes the best, model parameters are saved.
-        Else early-stop count increases.
+        Else early-stop's count increases.
 
         If early-stop count reaches `patience`, return `True`.
         Else return `False`
 
-        :param metric: Monitored value such as validation accuracy, validation loss.
+        :param metric: Monitored value such as validation accuracy / loss.
         :param model: PyTorch's model
-        :param save_name: File name to same `model`'s parameters.
+        :param save_name: File name to save `model`'s parameters.
         :return: Boolean
         """
 

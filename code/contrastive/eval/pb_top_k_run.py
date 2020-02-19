@@ -8,9 +8,10 @@ from .common import calculate_top1_and_topk_accuracy
 from .common import compute_mean_W
 from .common import dataset_to_list_of_samples_per_class
 from .common import get_best_model_name
+from .common import non_iid_pb_parameter_selection
 from .common import pb_parameter_selection
 from ..args import common_parser
-from ..datasets.australian import get_train_val_test_datasets as get_australian_train_val_test_datasets
+from ..datasets.auslan import get_train_val_test_datasets as get_auslan_train_val_test_datasets
 from ..datasets.cifar100 import get_train_val_test_datasets as get_cifar100_train_val_test_datasets
 from ..models.pb_models import StochasticCNN
 from ..models.pb_models import StochasticMLP
@@ -21,38 +22,38 @@ def main():
     logger = get_logger()
     parser = common_parser(pac_bayes=True, train=False)
     parser.add_argument('--top-k', type=int, default=5,
-                        help='the size of top k (default: 5)')
+                        help='The size of top k (default: 5)')
 
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device('cuda' if use_cuda else 'cpu')
+    is_catoni_bound = not args.non_iid
 
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     rnd = np.random.RandomState(args.seed)
+
     result = {}
 
     if not args.mlp:
-        # iid case: load CFIAR100 train and test data sets and load CNN
-        # load CIFAR train and test
+        # CNN: load CFIAR100 train and test data sets and load CNN
         train_set, _, test_set = get_cifar100_train_val_test_datasets(rnd, validation_ratio=args.validation_ratio)
         model = StochasticCNN(num_training_samples=0, rnd=rnd, num_last_units=args.dim_h, init_weights=False)
         num_classes = 100
     else:
-        # mlp case: load australian train test data sets, and load MLP
-        if args.criterion != 'pb':
-            train_ids = tuple(range(1, 8))
-        else:
-            train_ids = tuple(range(9))
+        # MLP: load AUSLAN train/test data sets, and initialize PAC-Bayesian MLP.
+        train_ids = tuple(range(9))
         test_ids = (9,)
 
-        train_set, _, test_set = get_australian_train_val_test_datasets(
-            train_ids=train_ids,
-            validation_ids=None,
-            test_ids=test_ids,
+        # The validation data set is not used during evaluation
+        train_set, _, test_set = get_auslan_train_val_test_datasets(
+            rnd=rnd,
             root=args.root,
-            to_tensor=False
+            train_ids=train_ids,
+            test_ids=test_ids,
+            validation_ratio=args.validation_ratio,
+            squash_time=True
         )
         model = StochasticMLP(num_training_samples=0, rnd=rnd, num_last_units=args.dim_h, init_weights=False)
         num_classes = train_set.num_classes
@@ -70,7 +71,10 @@ def main():
         if not args.model_name_dir:
             model_name = args.model_name
         else:
-            model_name = pb_parameter_selection(logger, json_fname=args.json_fname, num_train_data=args.num_train)
+            if is_catoni_bound:
+                model_name = pb_parameter_selection(logger, json_fname=args.json_fname)
+            else:
+                model_name = non_iid_pb_parameter_selection(logger, json_fname=args.json_fname)
     else:
         model_name = get_best_model_name(args)
 
@@ -82,6 +86,7 @@ def main():
     model.eval()
     top1_accuracies = []
     top5_accuracies = []
+
     if args.deterministic:
         num_snn = 1
     else:
@@ -99,6 +104,7 @@ def main():
             top1, topk = calculate_top1_and_topk_accuracy(test_loader, device, model, W, top_k=args.top_k)
             top1_accuracies.append(top1 * 100.)
             top5_accuracies.append(topk * 100.)
+
     top1_accuracies = np.array(top1_accuracies)
     top5_accuracies = np.array(top5_accuracies)
     logger.info(
@@ -109,9 +115,8 @@ def main():
     result['top{}'.format(args.top_k)] = top5_accuracies.mean()
 
     # mu averaged over random samples per class
-    num_trials = args.num_trials
-    top1_accuracies = np.zeros((num_snn, num_trials))
-    topk_accuracies = np.zeros((num_snn, num_trials))
+    top1_accuracies = np.zeros((num_snn, args.num_trials))
+    topk_accuracies = np.zeros((num_snn, args.num_trials))
 
     for snn_index in range(num_snn):
 
@@ -121,7 +126,7 @@ def main():
             else:
                 model.sample_noise()
 
-            for trial_id in range(num_trials):
+            for trial_id in range(args.num_trials):
                 W = compute_mean_W(model, class_id2samples, device, num_sub_samples=5).to(device)
                 top1, topk = calculate_top1_and_topk_accuracy(test_loader, device, model, W, top_k=args.top_k)
                 top1_accuracies[snn_index, trial_id] = top1 * 100

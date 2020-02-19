@@ -20,7 +20,7 @@ cd pb-contrastive
 
 pyenv install miniconda3-latest
 pyenv local miniconda3-latest
-conda create --name pac-bayes --file requirements.txt -y
+conda create --name pac-bayes --file conde/requirements.txt -y
 pyenv local miniconda3-latest/envs/pac-bayes
 ```
 
@@ -40,15 +40,42 @@ export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
 python setup.py install
 ```
 
-Run codes on `README.md` and `MLP-README.md` under `code` dir.
-Then run `create-tables.ipynb` to create tables in the manuscript.
+Run codes on `CNN-README.md` and `MLP-README.md` under `code` dir.
+Then run `create-tables.ipynb` to create tables in the main paper.
+
+Option:
+Run codes on `non-iid-README.md`, then run `create-tables-in-Appendix.ipynb` to create tables in the appendix.
+
+### Optional: Install parts of experimental dependencies on CPU via Dockerfile to run the jupyter notebook
+
+We provide a docker environment to run notebooks on your local machine without GPUs.
+
+For `bash/zsh`:
+
+```bash
+# cd code
+docker build . -t pb-contrastive:latest
+docker run -i -p 8888:8888 -v $(pwd):/pb-contrastive/code -w="/pb-contrastive/code" -t pb-contrastive /bin/bash
+
+jupyter notebook --ip=0.0.0.0 --allow-root
+```
+
+For `fish`:
+
+```fish
+# cd code
+docker build . -t pb-contrastive:latest
+docker run -i -p 8888:8888 -v (pwd):/pb-contrastive/code -w="/pb-contrastive/code" -t pb-contrastive /bin/bash
+
+jupyter notebook --ip=0.0.0.0 --allow-root
+```
 
 ---
 
 ## BibTeX
 
 ```
-@inproceedings{KGG2019,
+@inproceedings{NGG2019,
     title = {PAC-Bayesian Contrastive Unsupervised Representation Learning},
     author = {Kento Nozawa, Pascal Germain, Benjamin Guedj},
     year = {2019},

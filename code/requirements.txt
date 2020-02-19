@@ -98,7 +98,7 @@ pysocks=1.7.0=py37_0
 python=3.7.4=h265db76_0
 python-dateutil=2.8.0=py37_0
 python-libarchive-c=2.8=py37_13
-pytorch=1.2.0=py3.7_cuda10.0.130_cudnn7.6.2_0
+# pytorch=1.2.0=py3.7_cuda10.0.130_cudnn7.6.2_0
 pytz=2019.1=py_0
 pyzmq=18.0.0=py37he6710b0_0
 qt=5.9.7=h5867ecd_1
@@ -116,7 +116,7 @@ sqlite=3.29.0=h7b6447c_0
 terminado=0.8.2=py37_0
 testpath=0.4.2=py37_0
 tk=8.6.8=hbc83047_0
-torchvision=0.4.0=py37_cu100
+# torchvision=0.4.0=py37_cu100
 tornado=6.0.3=py37h7b6447c_0
 tqdm=4.32.1=py_0
 traitlets=4.3.2=py37_0

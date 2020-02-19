@@ -6,40 +6,56 @@ from scipy.stats import truncnorm
 
 class CNN(nn.Module):
     def __init__(self, rnd: np.random.RandomState, num_last_units=100, init_weights=True, supervised=False):
+        """
+        :param rnd: `np.random.RandomState` instance.
+        :param num_last_units: The dimensionality of representation and
+            the number of supervised classes when `supervised=True`.
+        :param init_weights: Boolean flag to initialize the weights.
+        :param supervised: If this value is `True`, the model is used by the supervised way.
+        """
         super(CNN, self).__init__()
         self.num_last_units = num_last_units
+
         self.features = self.create_features()
         self.f_last = nn.Linear(1600, num_last_units)
 
         if supervised:
-            self.classifier = nn.Linear(num_last_units, num_last_units)
+            self.classifier = nn.Linear(self.num_last_units, self.num_last_units)
 
         if init_weights:
             self._initialize_weights(rnd, supervised)
 
-    def forward(self, inputs):
+    def forward(self, inputs: torch.FloatTensor) -> torch.FloatTensor:
         """
-        Supervised feature extractor.
-        :param inputs: CIFAR-100's input data
-        :return: Feature representation Shape is (mini_batch, num_last_units)
+        Feature extractor.
+
+        :param inputs: CIFAR-100's input data.
+
+        :return: Feature representation Shape is (mini_batch, num_last_units).
         """
         x = self.features(inputs)
         x = torch.flatten(x, 1)
         x = self.f_last(x)
         return x
 
-    def g(self, inputs):
+    def g(self, inputs: torch.FloatTensor) -> torch.FloatTensor:
         """
         Supervised feed-forwarding function.
 
-        :param inputs: CIFAR-100's input data
-        :return: model's output. Shape is (mini_batch, num_last_units)
+        :param inputs: CIFAR-100's input data.
+
+        :return: model's output. Shape is (mini_batch, num_last_units).
         """
 
         return self.classifier(self.forward(inputs))
 
     @staticmethod
-    def create_features():
+    def create_features() -> torch.nn.modules.container.Sequential:
+        """
+        Initializes CNN components
+
+        :return: PyTorch's sequential instance.
+        """
         return nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=5, padding=1),
             nn.ReLU(inplace=True),
@@ -49,9 +65,18 @@ class CNN(nn.Module):
             nn.MaxPool2d(kernel_size=3, stride=2),
         )
 
-    def _initialize_weights(self, rnd: np.random.RandomState, supervised=False):
-        # Initialisation is based on the following repo
-        # https://github.com/gkdziugaite/pacbayes-opt/blob/58beae1f63ce0efaf749757a7c98eac2c8414238/snn/core/cnn_fn.py#L101
+    def _initialize_weights(self, rnd: np.random.RandomState, supervised=False) -> None:
+        """
+        Initialize the model's weights.
+
+        Initialization is based on the following repo
+        https://github.com/gkdziugaite/pacbayes-opt/blob/58beae1f63ce0efaf749757a7c98eac2c8414238/snn/core/cnn_fn.py#L101
+
+        :param rnd: `np.random.RandomState` instance.
+        :param supervised: Supervised mode flag.
+
+        :return: None
+        """
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):

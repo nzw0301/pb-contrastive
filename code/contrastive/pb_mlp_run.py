@@ -6,26 +6,32 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
 
 from .args import common_parser, check_args
-from .datasets.cifar100 import get_shape_for_contrastive_learning
+from .datasets.auslan import get_shape_for_contrastive_learning
 from .datasets.contrastive import get_contrastive_data_loaders
 from .loss import ContrastiveLoss
-from .models.pb_models import StochasticCNN
+from .models.pb_models import StochasticMLP
 from .utils.earlystopping import EarlyStopping
 from .utils.logger import get_logger
 
 
 def train(
-        args, model: StochasticCNN, device: torch.device, train_loader: torch.utils.data.dataloader.DataLoader,
-        optimizer, epoch: int,
+        args,
+        model: StochasticMLP,
+        device: torch.device,
+        train_loader: torch.utils.data.dataloader.DataLoader,
+        optimizer,
+        epoch: int,
         contrastive_loss: ContrastiveLoss,
         logger
 ) -> float:
     """
+    Update model weights per epoch.
+
     :param args: arg parser.
-    :param model: Instance of `StochasticCNN`.
+    :param model: Instance of `StochasticMLP`.
     :param device: PyTorch's device instance.
     :param train_loader: Training data loader.
-    :param optimizer: PyTorch's instance.
+    :param optimizer: PyTorch's optimizer instance.
     :param epoch: The number of epochs.
     :param contrastive_loss: the instance of ContrastiveLoss class.
     :param logger: logger.
@@ -37,8 +43,12 @@ def train(
     # Note: `average_objective` is not exact value.
     average_objective = 0.
     for batch_idx, (images, pos, negs) in enumerate(train_loader):
-        (batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg) = \
-            get_shape_for_contrastive_learning(len(images), args.block_size, args.neg_size, args.dim_h)
+
+        (batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos,
+         output2emb_shape_neg) = get_shape_for_contrastive_learning(
+            len(images), args.block_size, args.neg_size,
+            args.dim_h
+        )
 
         optimizer.zero_grad()
 
@@ -64,6 +74,7 @@ def train(
         model.constraint()
 
         average_objective += objective.item()
+
         if batch_idx % args.log_interval == 0:
             logger.info(
                 '\rTrain Epoch: {} [{}/{} ({:.0f}%)] PAC-Bayes objective: {:.2f} '
@@ -79,15 +90,19 @@ def train(
 
 def validation_loss(
         args,
-        model: StochasticCNN, device: torch.device, val_loader: torch.utils.data.dataloader.DataLoader,
+        model: StochasticMLP,
+        device: torch.device,
+        val_loader: torch.utils.data.dataloader.DataLoader,
         contrastive_loss: ContrastiveLoss,
-        logger, num_snn: int, deterministic=False
+        logger,
+        num_snn: int,
+        deterministic=False
 ) -> float:
     """
     Calculate validation loss.
 
     :param args: arg parser.
-    :param model: Instance of `StochasticCNN`.
+    :param model: Instance of `StochasticMLP`.
     :param device: PyTorch's device instance.
     :param val_loader: validation data loader
     :param contrastive_loss: the instance of ContrastiveLoss class.
@@ -95,6 +110,7 @@ def validation_loss(
     :param num_snn: The number of samples from posterior to compute the loss value. If `deterministic` is True,
         this value is ignored.
     :param deterministic: Boolean flag for deterministic.
+
     :return: Validation loss. Float.
     """
 
@@ -113,8 +129,11 @@ def validation_loss(
 
             sum_loss = 0.
             for batch_idx, (images, pos, negs) in enumerate(val_loader):
-                (batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg) = \
-                    get_shape_for_contrastive_learning(len(images), args.block_size, args.neg_size, args.dim_h)
+                (batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos,
+                 output2emb_shape_neg) = get_shape_for_contrastive_learning(
+                    len(images), args.block_size, args.neg_size,
+                    args.dim_h
+                )
 
                 # reshape
                 pos = pos.view(batch2input_shape_pos)
@@ -161,17 +180,20 @@ def main():
     rnd = np.random.RandomState(args.seed)
 
     device = torch.device('cuda' if use_cuda else 'cpu')
+    iid = not args.non_iid
 
     contrastive_loss = ContrastiveLoss(loss_name=args.loss, device=device)
 
     train_loader, val_loader = get_contrastive_data_loaders(
         rnd=rnd,
-        data_name='cifar',
+        data_name='auslan',
         validation_ratio=args.validation_ratio,
         mini_batch_size=args.batch_size,
+        num_blocks_per_class=45 * 24,
         block_size=args.block_size,
-        num_blocks_per_class=args.num_blocks_per_class,
         neg_size=args.neg_size,
+        root=args.root,
+        iid=iid
     )
 
     num_training_samples = len(train_loader.dataset)
@@ -180,23 +202,27 @@ def main():
     else:
         num_val_samples = len(val_loader.dataset)
         if args.criterion == 'pb':
-            logger.warn('You can pass 0. to `validation-ratio` argument. It can make the performance better.')
+            logger.warn('You can pass 0. to `validation-ratio` argument. It could make performance better.')
 
     logger.info('# training samples: {} # val samples: {}\n'.format(num_training_samples, num_val_samples))
     logger.info('PAC-Bayes parameters: λ: {}, b: {}, c: {}, δ: {}, prior log std: {}\n'.format(
         args.catoni_lambda, args.b, args.c, args.delta, args.prior_log_std)
     )
+    if iid:
+        logger.info('iid CULR\n')
+    else:
+        logger.info('non-iid CULR\n')
 
-    model = StochasticCNN(
-        num_last_units=args.dim_h,
-        trained_deterministic_model=None,
+    model = StochasticMLP(
         num_training_samples=num_training_samples,
+        rnd=rnd,
+        num_last_units=args.dim_h,
         catoni_lambda=args.catoni_lambda, b=args.b, c=args.c, delta=args.delta,
-        prior_log_std=args.prior_log_std,
-        rnd=rnd
+        prior_log_std=args.prior_log_std
     ).to(device)
 
     optimizer_name = args.optim.lower()
+
     if optimizer_name == 'adam':
         optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
     elif optimizer_name == 'sgd':
@@ -252,8 +278,7 @@ def main():
                 is_deterministic = eval_type == 'deterministic'
 
                 val_loss = validation_loss(
-                    args,
-                    model, device, val_loader, contrastive_loss,
+                    args, model, device, val_loader, contrastive_loss,
                     logger, args.num_snn, deterministic=is_deterministic
                 )
 

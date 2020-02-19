@@ -7,14 +7,30 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.data import DataLoader
 
 from ..args import common_parser, check_args
-from ..contrastive_loss import SupervisedLoss
 from ..datasets.cifar100 import get_train_val_test_datasets
+from ..loss import SupervisedLoss
 from ..models.cnn import CNN
 from ..utils.earlystopping import EarlyStopping
 from ..utils.logger import get_logger
 
 
-def train(args, model: CNN, supervised_loss: SupervisedLoss, device, train_loader, optimizer, epoch, logger):
+def train(
+        args, model: CNN, supervised_loss: SupervisedLoss, device, train_loader, optimizer, epoch: int, logger
+) -> None:
+    """
+    Update weights per epoch.
+
+    :param args: Parsed args.
+    :param model: CNN instance
+    :param supervised_loss: The instance of `SupervisedLoss` class.
+    :param device: PyTorch's device instance.
+    :param train_loader: Train data loader.
+    :param optimizer: Pytorch's optimizer insntace.
+    :param epoch: The current epoch for logger
+    :param logger: Logger instance.
+
+    :return: None
+    """
     model.train()
     for batch_idx, (data, targets) in enumerate(train_loader):
         data, targets = data.to(device), targets.to(device)
@@ -32,7 +48,20 @@ def train(args, model: CNN, supervised_loss: SupervisedLoss, device, train_loade
             ))
 
 
-def test(args, model: CNN, supervised_loss: SupervisedLoss, device, test_loader, logger, data_type='val'):
+def test(args, model: CNN, supervised_loss: SupervisedLoss, device, test_loader, logger, data_type='val') -> tuple:
+    """
+    Evaluation.
+
+    :param args: Parsed args.
+    :param model: CNN instance
+    :param supervised_loss: The instance of contrastive loss class.
+    :param device: PyTorch's device instance.
+    :param test_loader: Data loader of test data
+    :param logger: Logger instance.
+    :param data_type: Str. The type of data for logger. Either `val` or `test`.
+
+    :return: loss and accuracy
+    """
     model.eval()
     test_loss = 0
     correct = 0
@@ -49,15 +78,26 @@ def test(args, model: CNN, supervised_loss: SupervisedLoss, device, test_loader,
     logger.info(' {} set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         data_type,
         test_loss, correct, len(test_loader.dataset),
-        100. * correct / len(test_loader.dataset)))
+        100. * correct / len(test_loader.dataset))
+    )
     return test_loss, correct / len(test_loader.dataset)
 
 
-def get_data_loaders(rnd: np.random.RandomState, validation_ratio: float, root: str, batch_size: int, kwargs):
-    train_set, val_set, test_set = get_train_val_test_datasets(
-        rnd=rnd, validation_ratio=validation_ratio,
-        root=root, supervised=True
-    )
+def get_data_loaders(
+        rnd: np.random.RandomState, validation_ratio: float, root: str, batch_size: int, kwargs
+) -> tuple:
+    """
+    Create data loaders.
+
+    :param rnd: `np.random.RandomState` instance.
+    :param validation_ratio: The ratio of training data to create validation data.
+    :param root: relative path to store data.
+    :param batch_size: The size of mini-batches.
+    :param kwargs: kwags for data loader
+
+    :return: Tuples of data loaders.
+    """
+    train_set, val_set, test_set = get_train_val_test_datasets(rnd=rnd, validation_ratio=validation_ratio, root=root)
 
     train_loader = DataLoader(
         train_set,
@@ -99,8 +139,9 @@ if __name__ == '__main__':
     device = torch.device("cuda" if use_cuda else "cpu")
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
-    train_loader, val_loader, test_loader = get_data_loaders(rnd, args.validation_ratio, args.root, args.batch_size,
-                                                             kwargs)
+    train_loader, val_loader, test_loader = get_data_loaders(
+        rnd, args.validation_ratio, args.root, args.batch_size, kwargs
+    )
     supervised_loss = SupervisedLoss(num_last_units=100, loss=args.loss, device=device)
     model = CNN(num_last_units=100, rnd=rnd, supervised=True).to(device)
 
@@ -111,6 +152,8 @@ if __name__ == '__main__':
         optimizer = optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum)
     elif optimizer_name == 'rmsprop':
         optimizer = optim.RMSprop(params=model.parameters(), lr=args.lr)
+    else:
+        raise ValueError('Optimizer must be adam, sgd, or rmsprop. Not {}'.format(optimizer_name))
 
     scheduler = MultiStepLR(optimizer, milestones=args.schedule, gamma=args.gamma)
 

@@ -6,10 +6,10 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
 
 from .args import common_parser, check_args
-from .contrastive_loss import ContrastiveLoss
-from .datasets.cifar100 import get_contrastive_cifar100_data_loaders
 from .datasets.cifar100 import get_shape_for_contrastive_learning
-from .models import CNN
+from .datasets.contrastive import get_contrastive_data_loaders
+from .loss import ContrastiveLoss
+from .models.cnn import CNN
 from .utils.earlystopping import EarlyStopping
 from .utils.logger import get_logger
 
@@ -18,11 +18,27 @@ def train(
         args, model: CNN, device: torch.device, train_loader: torch.utils.data.dataloader.DataLoader,
         optimizer, epoch: int,
         contrastive_loss: ContrastiveLoss,
-        batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg,
         logger
-):
+) -> None:
+    """
+    Update model weights per epoch.
+
+    :param args: arg parser.
+    :param model: Instance of `CNN`.
+    :param device: PyTorch's device instance.
+    :param train_loader: Training data loader.
+    :param optimizer: PyTorch's optimizer instance.
+    :param epoch: The number of epochs.
+    :param contrastive_loss: the instance of ContrastiveLoss class.
+    :param logger: logger instance.
+
+    :return: None.
+    """
     model.train()
     for batch_idx, (images, pos, negs) in enumerate(train_loader):
+        (batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg) \
+            = get_shape_for_contrastive_learning(len(images), args.block_size, args.neg_size, args.dim_h)
+
         optimizer.zero_grad()
 
         # reshape
@@ -44,20 +60,36 @@ def train(
         if batch_idx % args.log_interval == 0:
             logger.info('\rTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.7f}'.format(
                 epoch, batch_idx * len(images), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item())
+                       100. * batch_idx / len(train_loader), loss.item())
             )
 
 
 def validation(
+        args,
         model: CNN, device: torch.device, val_loader: torch.utils.data.dataloader.DataLoader,
         contrastive_loss: ContrastiveLoss,
-        batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg,
         logger
-):
+) -> float:
+    """
+    Calculate validation loss.
+
+    :param args: arg parser.
+    :param model: Instance of `CNN`.
+    :param device: PyTorch's device instance.
+    :param val_loader: validation data loader
+    :param contrastive_loss: the instance of ContrastiveLoss class.
+    :param logger: logger instance.
+
+    :return: Validation loss. Float.
+   """
+
     model.eval()
     sum_loss = 0.
     with torch.no_grad():
         for batch_idx, (images, pos, negs) in enumerate(val_loader):
+            (batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg) \
+                = get_shape_for_contrastive_learning(len(images), args.block_size, args.neg_size, args.dim_h)
+
             # reshape
             pos = pos.view(batch2input_shape_pos)
             negs = negs.view(batch2input_shape_neg)
@@ -99,8 +131,9 @@ def main():
 
     contrastive_loss = ContrastiveLoss(loss_name=args.loss, device=device)
 
-    train_loader, val_loader = get_contrastive_cifar100_data_loaders(
+    train_loader, val_loader = get_contrastive_data_loaders(
         rnd=rnd,
+        data_name='cifar',
         validation_ratio=args.validation_ratio,
         mini_batch_size=args.batch_size,
         block_size=args.block_size,
@@ -116,9 +149,6 @@ def main():
 
     logger.info('# training samples: {} # val samples: {}\n'.format(num_training_samples, num_val_samples))
 
-    (batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg) \
-        = get_shape_for_contrastive_learning(args.batch_size, args.block_size, args.neg_size, args.dim_h)
-
     model = CNN(rnd=rnd, num_last_units=args.dim_h, supervised=False).to(device)
 
     optimizer_name = args.optim.lower()
@@ -129,7 +159,7 @@ def main():
     elif optimizer_name == 'rmsprop':
         optimizer = optim.RMSprop(params=model.parameters(), lr=args.lr)
 
-    logger.info('optimiser: {}\n'.format(optimizer_name))
+    logger.info('optimizer: {}\n'.format(optimizer_name))
 
     scheduler = MultiStepLR(optimizer, milestones=args.schedule, gamma=args.gamma)
     early_stopping = EarlyStopping(mode='min', patience=args.patience)
@@ -138,15 +168,12 @@ def main():
     save_name = 'lr-{}_{}_{}'.format(args.lr, optimizer_name, args.output_model_name)
     for epoch in range(1, args.epoch + 1):
         train(
-            args, model, device, train_loader, optimizer, epoch, contrastive_loss,
-            batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg,
-            logger
+            args, model, device, train_loader, optimizer, epoch, contrastive_loss, logger
         )
         scheduler.step()
 
         val_loss = validation(
-            model, device, val_loader, contrastive_loss,
-            batch2input_shape_pos, batch2input_shape_neg, output2emb_shape_pos, output2emb_shape_neg, logger
+            args, model, device, val_loader, contrastive_loss, logger
         )
 
         learning_history['val_loss'].append(val_loss)

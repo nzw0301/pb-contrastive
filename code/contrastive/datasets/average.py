@@ -1,5 +1,5 @@
-from torch.utils.data import Dataset
 import torch
+from torch.utils.data import Dataset
 
 
 class AverageDataset(Dataset):
@@ -8,17 +8,18 @@ class AverageDataset(Dataset):
 
     def __init__(
             self,
-            fx_test,
+            fx_test: torch.FloatTensor,
             raw_test_targets,
-            target_ids
+            target_ids: tuple
     ):
         """
-        This class does not use `transform` because samples of `cifar100/Australian`
-        have already been preprocessed by calling `CIFAR100Dataset/AustralianDataset`.
+        This class does not use `transform` because samples of `cifar100/Auslan`
+        have already been preprocessed by calling `CIFAR100/Auslan`.
 
-        :param fx_test: Tensor contains feature representations on test data shape is (num-test data, dim-features)
-        :param raw_test_targets: original CIFAR100/Australian's test label. shape is  (num-test data, )
-        :param target_ids: CIFAR100/Australian's id list contains int numbers that are from 0 to 99.
+        :param fx_test: Tensor contains feature representations on test data shape is (num_test_data, dim-features)
+        :param raw_test_targets: original CIFAR100/Auslan's test label. shape is  (num_test_data, )
+        :param target_ids: CIFAR100/Auslan's id tuple contains int numbers that are from 0 to 99 for CIFAR100
+            and from 0 to 94 for AUSLAN.
         """
 
         label2average_id = {target_id: new_id for new_id, target_id in enumerate(target_ids)}
@@ -34,15 +35,8 @@ class AverageDataset(Dataset):
 
         self.data = torch.stack(self.data)
 
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (sample, positive-block, negative block)
-        """
+    def __getitem__(self, index) -> tuple:
         return self.data[index], self.targets[index]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.data)

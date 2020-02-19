@@ -13,7 +13,7 @@ from .common import dataset_to_list_of_samples_per_class
 from .common import get_best_model_name
 from .common import tasks_generator
 from ..args import common_parser, check_args
-from ..datasets.australian import get_train_val_test_datasets as get_australian_train_val_test_datasets
+from ..datasets.auslan import get_train_val_test_datasets as get_auslan_train_val_test_datasets
 from ..datasets.average import AverageDataset
 from ..datasets.cifar100 import get_train_val_test_datasets as get_cifar100_train_val_test_datasets
 from ..models.cnn import CNN
@@ -32,24 +32,23 @@ def main():
     device = torch.device('cuda' if use_cuda else 'cpu')
 
     torch.manual_seed(args.seed)
-    torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     rnd = np.random.RandomState(args.seed)
+
     result = {}
 
     if not args.mlp:
-        # iid case: load CFIAR100 train and test data sets and load CNN
+        # CNN: load CFIAR100 train and test data sets and load CNN
         train_set, _, test_set = get_cifar100_train_val_test_datasets(
-            rnd, validation_ratio=args.validation_ratio, root=args.root
+            rnd=rnd, validation_ratio=args.validation_ratio, root=args.root
         )
         model = CNN(rnd=rnd, init_weights=False, supervised=args.supervised, num_last_units=args.dim_h)
         num_classes = 100
     else:
-        # mlp case: load australian train test data sets, and load MLP
-        train_set, _, test_set = get_australian_train_val_test_datasets(
-            root=args.root,
-            to_tensor=False
+        # MLP: load australian train test data sets and load MLP
+        train_set, _, test_set = get_auslan_train_val_test_datasets(
+            rnd=rnd, root=args.root, validation_ratio=args.validation_ratio, squash_time=True
         )
         model = MLP(rnd=rnd, init_weights=False, supervised=args.supervised, num_last_units=args.dim_h)
         num_classes = train_set.num_classes

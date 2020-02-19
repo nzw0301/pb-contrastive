@@ -6,23 +6,42 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
 
 from .args import common_parser, check_args
-from .contrastive_loss import ContrastiveLoss
-from .datasets.australian import get_contrastive_australian_data_loaders
-from .datasets.australian import get_shape_for_contrastive_learning
+from .datasets.auslan import get_shape_for_contrastive_learning
+from .datasets.contrastive import get_contrastive_data_loaders
+from .loss import ContrastiveLoss
 from .models.pb_models import StochasticMLP
 from .utils.earlystopping import EarlyStopping
 from .utils.logger import get_logger
 
 
 def train(
-        args, model: StochasticMLP, device: torch.device, train_loader: torch.utils.data.dataloader.DataLoader,
-        optimizer, epoch: int,
+        args,
+        model: StochasticMLP,
+        device: torch.device,
+        train_loader: torch.utils.data.dataloader.DataLoader,
+        optimizer,
+        epoch: int,
         contrastive_loss: ContrastiveLoss,
-        logger
-):
+        T: int,
+        logger,
+) -> float:
+    """
+    Update model weights per epoch.
+
+    :param args: Argument parser.
+    :param model: Instance of `StochasticMLP`.
+    :param device: PyTorch's device instance.
+    :param train_loader: Training data loader.
+    :param optimizer: PyTorch's optimizer instance.
+    :param epoch: The number of epochs.
+    :param contrastive_loss: the instance of ContrastiveLoss class.
+    :param T: the length of dependency (== the size of blocks for non-iid contrastive data)
+    :param logger: logger.
+
+    :return: Averaged PAC-Bayes bound value.
+    """
     model.train()
 
-    # Note: `average_objective` is not exact value.
     average_objective = 0.
     for batch_idx, (images, pos, negs) in enumerate(train_loader):
 
@@ -50,30 +69,55 @@ def train(
 
         loss = contrastive_loss(feature=data_features, positive_feature=pos_features, negative_features=neg_features)
 
-        objective, kl, union = model.pac_bayes_objective(loss)
+        objective, chi_square, complexity = model.non_iid_pac_bayes_objective(loss, T)
+
         objective.backward()
         optimizer.step()
-        model.constraints()
+
+        model.constraint()  # for union bound's constraint
+        model.non_iid_posterior_constraint()  # for chi-square divergence's constraint
 
         average_objective += objective.item()
+
         if batch_idx % args.log_interval == 0:
             logger.info(
                 '\rTrain Epoch: {} [{}/{} ({:.0f}%)] PAC-Bayes objective: {:.2f} '
-                'cont. loss: {:.7f} KL: {:.2f}, union: {:.2f}, prior log std : {:.2f}'.format(
+                'cont. loss: {:.4f} complexity: {:.2f}, chi^2: {:.2f}, prior log std : {:.2f}'.format(
                     epoch, batch_idx * len(images), len(train_loader.dataset), 100. * batch_idx / len(train_loader),
-                    objective.item(), loss.item(), kl.item(), union.item(),
-                    model.prior_log_std.item()
+                    objective.item(), loss.item(), complexity.item(), chi_square.item(), model.prior_log_std.item()
                 )
             )
 
+    # Note: `average_objective` is not accurate average's objective value.
     return average_objective / (batch_idx + 1)
 
 
 def validation_loss(
-        args, model: StochasticMLP, device: torch.device, val_loader: torch.utils.data.dataloader.DataLoader,
+        args,
+        model: StochasticMLP,
+        device: torch.device,
+        val_loader: torch.utils.data.dataloader.DataLoader,
         contrastive_loss: ContrastiveLoss,
-        logger, num_snn: int, deterministic=False
-):
+        logger,
+        num_snn: int,
+        deterministic=False
+) -> float:
+    """
+    Calculate validation loss.
+
+    :param args: arg parser.
+    :param model: Instance of `StochasticMLP`.
+    :param device: PyTorch's device instance.
+    :param val_loader: validation data loader
+    :param contrastive_loss: the instance of ContrastiveLoss class.
+    :param logger: logger.
+    :param num_snn: The number of samples from posterior to compute the loss value. If `deterministic` is True,
+        this value is ignored.
+    :param deterministic: Boolean flag for deterministic.
+
+    :return: Validation loss. Float.
+    """
+
     if deterministic:
         num_snn = 1
 
@@ -119,7 +163,7 @@ def validation_loss(
     else:
         prefix = 'stochastic'
 
-    logger.info(' {} val. loss: {:.7f}\n'.format(prefix, validation_loss))
+    logger.info(' {} val. cont. loss: {:.4f}\n'.format(prefix, validation_loss))
 
     return validation_loss
 
@@ -138,26 +182,24 @@ def main():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     rnd = np.random.RandomState(args.seed)
+    iid = not args.non_iid
 
     device = torch.device('cuda' if use_cuda else 'cpu')
 
     contrastive_loss = ContrastiveLoss(loss_name=args.loss, device=device)
 
-    if is_criterion_val_loss:
-        train_ids = tuple(range(1, 8))
-        val_ids = (8, )
-    else:
-        train_ids = tuple(range(9))
-        val_ids = None
-
-    train_loader, val_loader = get_contrastive_australian_data_loaders(
-        train_ids=train_ids,
-        validation_ids=val_ids,
-        test_ids=None,
+    # `num_blocks_per_class` is ignored due to non-iid setting.
+    train_loader, val_loader = get_contrastive_data_loaders(
+        rnd=rnd,
+        data_name='auslan',
+        validation_ratio=args.validation_ratio,
         mini_batch_size=args.batch_size,
+        num_blocks_per_class=45 * 24,  # this value is ignored when iid is False.
         block_size=args.block_size,
         neg_size=args.neg_size,
-        root=args.root
+        root=args.root,
+        include_test=False,
+        iid=iid
     )
 
     num_training_samples = len(train_loader.dataset)
@@ -169,27 +211,30 @@ def main():
             logger.warn('You can pass 0. to `validation-ratio` argument. It could make performance better.')
 
     logger.info('# training samples: {} # val samples: {}\n'.format(num_training_samples, num_val_samples))
-    logger.info('PAC-Bayes parameters: λ: {}, b: {}, c: {}, δ: {}, prior log std: {}\n'.format(
-        args.catoni_lambda, args.b, args.c, args.delta, args.prior_log_std)
-    )
+    logger.info('PAC-Bayes parameters: b: {}, c: {}, δ: {}, prior log std: {}\n'.format(
+        args.b, args.c, args.delta, args.prior_log_std
+    ))
 
     model = StochasticMLP(
         num_training_samples=num_training_samples,
         rnd=rnd,
         num_last_units=args.dim_h,
         catoni_lambda=args.catoni_lambda, b=args.b, c=args.c, delta=args.delta,
-        prior_log_std=args.prior_log_std
+        prior_log_std=args.prior_log_std,
     ).to(device)
 
     optimizer_name = args.optim.lower()
+
     if optimizer_name == 'adam':
         optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
     elif optimizer_name == 'sgd':
         optimizer = optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum)
     elif optimizer_name == 'rmsprop':
         optimizer = optim.RMSprop(params=model.parameters(), lr=args.lr)
+    else:
+        raise ValueError('Optimizer must be adam, sgd, or rmsprop. Not {}'.format(optimizer_name))
 
-    logger.info('optimiser: {}\n'.format(optimizer_name))
+    logger.info('optimizer: {}\n'.format(optimizer_name))
 
     scheduler = MultiStepLR(optimizer, milestones=args.schedule, gamma=args.gamma)
 
@@ -221,10 +266,14 @@ def main():
             args.lr, optimizer_name, args.criterion, args.output_model_name
         )
 
+    if iid:
+        T = 0.
+    else:
+        T = args.block_size
+
     for epoch in range(1, args.epoch + 1):
         average_objective = train(
-            args, model, device, train_loader, optimizer, epoch, contrastive_loss,
-            logger
+            args, model, device, train_loader, optimizer, epoch, contrastive_loss, T, logger
         )
         scheduler.step()
 

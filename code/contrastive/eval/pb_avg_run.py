@@ -10,10 +10,11 @@ from .common import compute_mean_W, compute_mean_W_tensor
 from .common import compute_test_fx
 from .common import dataset_to_list_of_samples_per_class
 from .common import get_best_model_name
+from .common import non_iid_pb_parameter_selection
 from .common import pb_parameter_selection
 from .common import tasks_generator
 from ..args import common_parser
-from ..datasets.australian import get_train_val_test_datasets as get_australian_train_val_test_datasets
+from ..datasets.auslan import get_train_val_test_datasets as get_auslan_train_val_test_datasets
 from ..datasets.average import AverageDataset
 from ..datasets.cifar100 import get_train_val_test_datasets as get_cifar100_train_val_test_datasets
 from ..models.pb_models import StochasticCNN
@@ -28,6 +29,7 @@ def main():
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device('cuda' if use_cuda else 'cpu')
+    is_catoni_bound = not args.non_iid
 
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
@@ -36,26 +38,22 @@ def main():
     result = {}
 
     if not args.mlp:
-        # iid case: load CFIAR100 train and test data sets and load CNN
-        # load CIFAR train and test
+        # CNN: load CFIAR100 train and test data sets and load CNN
         train_set, _, test_set = get_cifar100_train_val_test_datasets(rnd, validation_ratio=args.validation_ratio)
         model = StochasticCNN(num_last_units=args.dim_h, num_training_samples=0, rnd=rnd, init_weights=False)
         num_classes = 100
     else:
-        # mlp case: load australian train test data sets, and load MLP
-
-        if args.criterion != 'pb':
-            train_ids = tuple(range(1, 8))
-        else:
-            train_ids = tuple(range(9))
+        # MLP: load australian train test data sets and load MLP
+        train_ids = tuple(range(1, 9))
         test_ids = (9,)
 
-        train_set, _, test_set = get_australian_train_val_test_datasets(
+        train_set, _, test_set = get_auslan_train_val_test_datasets(
+            rnd=rnd,
             train_ids=train_ids,
-            validation_ids=None,
             test_ids=test_ids,
             root=args.root,
-            to_tensor=False
+            validation_ratio=args.validation_ratio,
+            squash_time=True
         )
         model = StochasticMLP(rnd=rnd, num_training_samples=0, num_last_units=args.dim_h, init_weights=False)
         num_classes = train_set.num_classes
@@ -73,7 +71,10 @@ def main():
         if not args.model_name_dir:
             model_name = args.model_name
         else:
-            model_name = pb_parameter_selection(logger, json_fname=args.json_fname, num_train_data=args.num_train)
+            if is_catoni_bound:
+                model_name = pb_parameter_selection(logger, json_fname=args.json_fname)
+            else:
+                model_name = non_iid_pb_parameter_selection(logger, json_fname=args.json_fname)
     else:
         model_name = get_best_model_name(args)
 
@@ -136,8 +137,7 @@ def main():
     result['avg{}'.format(args.num_avg_classes)] = average_acc_over_snn.mean()
 
     # mu averaged over random samples per class
-    num_trials = args.num_trials
-    avg_accuracies = np.zeros((num_snn, num_trials))
+    avg_accuracies = np.zeros((num_snn, args.num_trials))
     with torch.no_grad():
         for snn_index in range(1, num_snn + 1):
             if args.deterministic:
@@ -145,7 +145,7 @@ def main():
             else:
                 model.sample_noise()
 
-            W = compute_mean_W_tensor(model, class_id2samples, device, samples=5, num_trials=num_trials)
+            W = compute_mean_W_tensor(model, class_id2samples, device, samples=5, num_trials=args.num_trials)
             fx_test = compute_test_fx(model, test_loader, device)
 
             for task_id, task in enumerate(tasks_generator(

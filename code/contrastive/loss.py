@@ -3,10 +3,10 @@ import torch
 import torch.nn.functional as F
 
 
-def logistic_loss(input, reduction='mean', hinge_tensor=None):
+def logistic_loss(input, reduction='mean', hinge_tensor=None) -> torch.FloatTensor:
     """
-    :param input: 2D tensor. shape: (mini-batch-size, num-negative)
-    :param reduction: PyTorch loss's reduction parameter
+    :param input: 2D tensor. shape: (mini-batch-size, num-negative).
+    :param reduction: PyTorch loss's reduction parameter.
     :param hinge_tensor: This tensor is ignored in this function.
 
     :return: FloatTensor of loss.
@@ -26,10 +26,10 @@ def logistic_loss(input, reduction='mean', hinge_tensor=None):
         raise ValueError(reduction + ' is not valid')
 
 
-def hinge_loss(input, reduction='mean', hinge_tensor=None):
+def hinge_loss(input, reduction='mean', hinge_tensor=None) -> torch.FloatTensor:
     """
-    :param input: 2D tensor. shape: (mini-batch-size, num-negative). element value is f(x)^T [f(x^+) - f(x^-)]
-    :param reduction: PyTorch loss's reduction parameter
+    :param input: 2D tensor. shape: (mini-batch-size, num-negative). element value is f(x)^T [f(x^+) - f(x^-)].
+    :param reduction: PyTorch loss's reduction parameter.
     :param hinge_tensor: Hinge loss's tensor contains 0.
 
     :return: FloatTensor of loss.
@@ -50,10 +50,10 @@ def hinge_loss(input, reduction='mean', hinge_tensor=None):
         raise ValueError(reduction + ' is not valid')
 
 
-def zero_one_loss(input, reduction='mean', hinge_tensor=None):
+def zero_one_loss(input, reduction='mean', hinge_tensor=None) -> torch.FloatTensor:
     """
     :param input: 2D tensor. shape: (mini-batch-size, num-negative). Each element value is f(x)^T [f(x^+) - f(x^-)].
-    :param reduction: PyTorch loss's reduction parameter
+    :param reduction: PyTorch loss's reduction parameter.
     :param hinge_tensor: Hinge loss's tensor contains 0.
 
     :return: FloatTensor of loss.
@@ -77,8 +77,9 @@ class ContrastiveLoss(torch.nn.Module):
     def __init__(self, loss_name, device='cpu'):
         """
         Contrastive loss class. This class supports Hinge loss and logistic loss.
+
         :param loss_name: loss function name either `hinge` or `logistic`.
-        :param device: Device to store hinge loss's constant tensor.
+        :param device: PyTorch's device instance to store a constant tensor for Hinge loss.
         """
 
         assert loss_name in self._loss_names, \
@@ -97,10 +98,11 @@ class ContrastiveLoss(torch.nn.Module):
 
     def forward(self, feature, positive_feature, negative_features, reduction='mean'):
         """
-        :param feature: shape: (mini-batch, num-features)
-        :param positive_feature: shape: (mini-batch, size-blocks, num-features)
-        :param negative_features: shape: (mini-batch, num-negatives, size-blocks, num-features)
-        :param reduction: Same to PyTorch
+        :param feature: shape: (mini-batch, num-features).
+        :param positive_feature: shape: (mini-batch, size-blocks, num-features).
+        :param negative_features: shape: (mini-batch, num-negatives, size-blocks, num-features).
+        :param reduction: Same to PyTorch.
+
         :return: Tensor of loss.
         """
 
@@ -123,9 +125,9 @@ class SupervisedLoss(torch.nn.Module):
 
     def __init__(self, loss, num_last_units=100, device='cpu'):
         """
-        :param loss: loss name. Valid loss is in {logistic, hinge, cross_entropy}
-        :param num_last_units: The number of classes
-        :param device: PyTorch's device instance
+        :param loss: loss name. Valid loss is in {logistic, hinge, cross_entropy}.
+        :param num_last_units: The number of classes.
+        :param device: PyTorch's device instance.
         """
 
         super(SupervisedLoss, self).__init__()
@@ -142,46 +144,50 @@ class SupervisedLoss(torch.nn.Module):
             raise ValueError
 
     @staticmethod
-    def cross_entropy(model_output, targets, reduction='mean'):
+    def cross_entropy(model_output, targets, reduction='mean') -> torch.FloatTensor:
         """
-        :param model_output: Output tensor of supervised model. Shape is (mini_batch, num_classes)
-        :param targets: Label long tensor. Shape is (mini_batch, num_classes)
-        :param reduction: Same to PyTorch
-        :return: FloatTensor contains loss value
+        :param model_output: Output tensor of supervised model. Shape is (mini_batch, num_classes).
+        :param targets: Label long tensor. Shape is (mini_batch, num_classes).
+        :param reduction: Same to PyTorch.
+
+        :return: FloatTensor contains loss value.
         """
 
         output = F.log_softmax(model_output, dim=1)
         loss = F.nll_loss(output, targets, reduction=reduction)
         return loss
 
-    def hinge(self, model_output, targets, reduction='mean'):
+    def hinge(self, model_output, targets, reduction='mean') -> torch.FloatTensor:
         """
-        :param model_output: Output tensor of supervised model. Shape is (mini_batch, num_classes)
-        :param targets: Label long tensor. Shape is (mini_batch, num_classes)
-        :param reduction: Same to PyTorch
-        :return: FloatTensor contains loss value
+        :param model_output: Output tensor of supervised model. Shape is (mini_batch, num_classes).
+        :param targets: Label long tensor. Shape is (mini_batch, num_classes).
+        :param reduction: Same to PyTorch.
+
+        :return: FloatTensor contains loss value.
         """
 
         loss_input = self.make_loss_input(model_output, targets)
         return hinge_loss(loss_input, reduction=reduction, hinge_tensor=self.tensor_in_hinge)
 
-    def logistic(self, model_output, targets, reduction='mean'):
+    def logistic(self, model_output, targets, reduction='mean') -> torch.FloatTensor:
         """
-        :param model_output: Output tensor of supervised model. Shape is (mini_batch, num_classes)
-        :param targets: Label long tensor. Shape is (mini_batch, num_classes)
-        :param reduction: Same to PyTorch
-        :return: FloatTensor contains loss value
+        :param model_output: Output tensor of supervised model. Shape is (mini_batch, num_classes).
+        :param targets: Label long tensor. Shape is (mini_batch, num_classes).
+        :param reduction: Same to PyTorch.
+
+        :return: FloatTensor contains loss value.
         """
 
         loss_input = self.make_loss_input(model_output, targets)
         return logistic_loss(loss_input, reduction=reduction)
 
-    def make_loss_input(self, model_output, targets):
+    def make_loss_input(self, model_output, targets) -> torch.FloatTensor:
         """
         Convert model's output tensor to calculate loss value.
-        :param model_output: shape is (mini_batch, num_classes)
-        :param targets: Label. Shape is (mini_batch, num_classes)
-        :return: FloatTensor shape (mini-batch, num_classes)
+        :param model_output: Shape is (mini_batch, num_classes).
+        :param targets: Label. Shape is (mini_batch, num_classes).
+
+        :return: FloatTensor shape (mini-batch, num_classes).
         """
 
         num_mini_batch = len(targets)

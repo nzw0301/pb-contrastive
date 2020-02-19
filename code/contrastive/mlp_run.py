@@ -6,9 +6,9 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
 
 from .args import common_parser, check_args
-from .contrastive_loss import ContrastiveLoss
-from .datasets.australian import get_contrastive_australian_data_loaders
-from .datasets.australian import get_shape_for_contrastive_learning
+from .datasets.auslan import get_shape_for_contrastive_learning
+from .datasets.contrastive import get_contrastive_data_loaders
+from .loss import ContrastiveLoss
 from .models.mlp import MLP
 from .utils.earlystopping import EarlyStopping
 from .utils.logger import get_logger
@@ -19,7 +19,20 @@ def train(
         optimizer, epoch: int,
         contrastive_loss: ContrastiveLoss,
         logger
-):
+) -> None:
+    """
+    Update model weights per epoch.
+
+    :param args: arg parser.
+    :param model: Instance of `MLP`.
+    :param device: PyTorch's device instance.
+    :param train_loader: Training data loader.
+    :param optimizer: PyTorch's optimizer instance.
+    :param epoch: The number of epochs.
+    :param contrastive_loss: the instance of ContrastiveLoss class.
+    :param logger: logger.
+
+    """
     model.train()
     for batch_idx, (samples, pos, negs) in enumerate(train_loader):
         optimizer.zero_grad()
@@ -46,7 +59,7 @@ def train(
         if batch_idx % args.log_interval == 0:
             logger.info('\rTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.7f}'.format(
                 epoch, batch_idx * len(samples), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item())
+                       100. * batch_idx / len(train_loader), loss.item())
             )
 
 
@@ -54,7 +67,20 @@ def validation(
         args,
         model: MLP, device: torch.device, val_loader: torch.utils.data.dataloader.DataLoader,
         contrastive_loss: ContrastiveLoss, logger
-):
+) -> torch.FloatTensor:
+    """
+    Calculate validation loss.
+
+    :param args: arg parser.
+    :param model: Instance of `MLP`.
+    :param device: PyTorch's device instance.
+    :param val_loader: validation data loader.
+    :param contrastive_loss: the instance of ContrastiveLoss class.
+    :param logger: logger.
+
+    :return: Validation loss. Float.
+   """
+
     model.eval()
     sum_loss = 0.
     with torch.no_grad():
@@ -91,6 +117,7 @@ def main():
     check_args(args)
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
+    iid = not args.non_iid
 
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
@@ -102,17 +129,16 @@ def main():
 
     contrastive_loss = ContrastiveLoss(loss_name=args.loss, device=device)
 
-    train_ids = tuple(range(1, 8))
-    val_ids = (8, )
-
-    train_loader, val_loader = get_contrastive_australian_data_loaders(
-        train_ids=train_ids,
-        validation_ids=val_ids,
-        test_ids=None,
+    train_loader, val_loader = get_contrastive_data_loaders(
+        rnd=rnd,
+        data_name='auslan',
+        validation_ratio=args.validation_ratio,
         mini_batch_size=args.batch_size,
+        num_blocks_per_class=45 * 24,
         block_size=args.block_size,
         neg_size=args.neg_size,
-        root=args.root
+        root=args.root,
+        iid=iid
     )
 
     num_training_samples = len(train_loader.dataset)
@@ -132,8 +158,10 @@ def main():
         optimizer = optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum)
     elif optimizer_name == 'rmsprop':
         optimizer = optim.RMSprop(params=model.parameters(), lr=args.lr)
+    else:
+        raise ValueError('Optimizer must be adam, sgd, or rmsprop. Not {}'.format(optimizer_name))
 
-    logger.info('optimiser: {}\n'.format(optimizer_name))
+    logger.info('optimizer: {}\n'.format(optimizer_name))
 
     scheduler = MultiStepLR(optimizer, milestones=args.schedule, gamma=args.gamma)
     early_stopping = EarlyStopping(mode='min', patience=args.patience)

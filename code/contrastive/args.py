@@ -1,12 +1,14 @@
 import argparse
 
 
-def check_args(args, pac_bayes=False, train=True):
+def check_args(args, pac_bayes=False, train=True) -> None:
     """
     Check the argument values
+
     :param args: Parsed args.
     :param pac_bayes: PAC-Bayes model's flag.
     :param train: training model flag.
+
     :return: None
     """
 
@@ -41,12 +43,14 @@ def check_args(args, pac_bayes=False, train=True):
 
 def common_parser(pac_bayes=False, train=True):
     """
+
     :param pac_bayes: PAC-Bayes model's flag.
     :param train: training model flag.
+
     :return: Parser
     """
 
-    parser = argparse.ArgumentParser(description='PyTorch CNN contrastive loss with/without PAC-Bayes bound')
+    parser = argparse.ArgumentParser(description='Experiment\'s args')
 
     # common learning parameters
     parser.add_argument('--lr', type=float, default=0.001, metavar='L',
@@ -102,6 +106,8 @@ def common_parser(pac_bayes=False, train=True):
                         help='The dimensionality of embedding space (default: 100)')
     parser.add_argument('--root', type=str, default='~/data',
                         help='Absolute data path (default: ~/data)')
+    parser.add_argument('--non-iid', action='store_true', default=False,
+                        help='Non-iid mode. (default: False)')
 
     # evaluation part
     if not train:
@@ -116,10 +122,8 @@ def common_parser(pac_bayes=False, train=True):
         if pac_bayes:
             parser.add_argument('--deterministic', action='store_true', default=False,
                                 help='Deterministic evaluation mode. (default: False)')
-            parser.add_argument('--num-train', type=int, default=50_000, metavar='M',
-                                help='the number of training samples (default: 50000)')
             parser.add_argument('--json-fname', type=str, default='pb_bound_values.json',
-                                help='json fname that contains pre-computed terms of PAC-Bayes bound')
+                                help='json file name that contains pre-computed terms to compute PAC-Bayes bound')
 
     # for PAC-bayesian setting
     if pac_bayes:
