@@ -1,3 +1,5 @@
+# Codes for [PAC-Bayesian Contrastive Unsupervised Representation Learning](https://arxiv.org/abs/1910.04464)
+
 ## Experimental environment
 
 - Ubuntu 18.04.1 LTS
@@ -6,7 +8,6 @@
 - `conda`
 
 ---
-
 
 ```bash
 git clone git@github.com:nzw0301/pb-contrastive.git
@@ -40,11 +41,11 @@ export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
 python setup.py install
 ```
 
-Run codes on `CNN-README.md` and `MLP-README.md` under `code` dir.
-Then run `create-tables.ipynb` to create tables in the main paper.
+Run codes on [`CNN-README.md`](./code/CNN-README.md) and [`MLP-README.md`](./code/MLP-README.md) under [`code`](./code) dir.
+Then run [`create-tables.ipynb`](./code/create-tables.ipynb) to create tables in the main paper.
 
 Option:
-Run codes on `non-iid-README.md`, then run `create-tables-in-Appendix.ipynb` to create tables in the appendix.
+Run codes on [`non-iid-README.md`](code/non-iid-README.md), then run [`create-tables-in-Appendix.ipynb`](./code/create-tables-in-Appendix.ipynb) to create tables in the appendix.
 
 ### Optional: Install parts of experimental dependencies on CPU via Dockerfile to run the jupyter notebook
 
@@ -78,8 +79,7 @@ jupyter notebook --ip=0.0.0.0 --allow-root
 @inproceedings{NGG2019,
     title = {PAC-Bayesian Contrastive Unsupervised Representation Learning},
     author = {Kento Nozawa, Pascal Germain, Benjamin Guedj},
-    year = {2019},
-    archivePrefix = {arXiv},
-    eprint = {1910.04464},
+    year = {2020},
+    booktitle = {UAI}
 }
 ```
