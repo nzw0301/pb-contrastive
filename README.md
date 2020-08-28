@@ -73,13 +73,19 @@ jupyter notebook --ip=0.0.0.0 --allow-root
 
 ---
 
-## BibTeX
+## Related resouces
+
+- [Presentation slides](https://nzw0301.github.io/assets/pdf/uai2020.pdf)
+- [Presentation on Youtube](https://www.youtube.com/watch?v=s-PrWBoakw0)
+
+## Reference
 
 ```
-@inproceedings{NGG2019,
+@inproceedings{NGG2020,
     title = {PAC-Bayesian Contrastive Unsupervised Representation Learning},
     author = {Kento Nozawa, Pascal Germain, Benjamin Guedj},
     year = {2020},
-    booktitle = {UAI}
+    booktitle = {UAI},
+    pages = {21--30}
 }
 ```
