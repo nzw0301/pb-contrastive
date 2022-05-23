@@ -73,7 +73,7 @@ jupyter notebook --ip=0.0.0.0 --allow-root
 
 ---
 
-## Related resouces
+## Related resources
 
 - [Presentation slides](https://nzw0301.github.io/assets/pdf/uai2020.pdf)
 - [Presentation on Youtube](https://www.youtube.com/watch?v=s-PrWBoakw0)
